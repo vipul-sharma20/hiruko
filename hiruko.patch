@@ -1,0 +1,158 @@
+diff --git a/Python/ceval.c b/Python/ceval.c
+index 4e4adc2d63..b02425ea5a 100644
+--- a/Python/ceval.c
++++ b/Python/ceval.c
+@@ -662,6 +662,7 @@ static int _Py_TracingPossible = 0;
+    per thread, now just a pair o' globals */
+ int _Py_CheckInterval = 100;
+ volatile int _Py_Ticker = 0; /* so that we hit a "tick" first thing */
++volatile int _Py_Ticker_Count = 0;
+ 
+ PyObject *
+ PyEval_EvalCode(PyCodeObject *co, PyObject *globals, PyObject *locals)
+@@ -1090,6 +1091,7 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
+                 goto fast_next_opcode;
+             }
+             _Py_Ticker = _Py_CheckInterval;
++            _Py_Ticker_Count++;
+             tstate->tick_counter++;
+ #ifdef WITH_TSC
+             ticked = 1;
+diff --git a/Python/thread_pthread.h b/Python/thread_pthread.h
+index 79c66d4f32..7c53fd1dfa 100644
+--- a/Python/thread_pthread.h
++++ b/Python/thread_pthread.h
+@@ -3,6 +3,28 @@
+ 
+ #include <stdlib.h>
+ #include <string.h>
++#include <sys/resource.h>
++#include <sched.h>
++
++#define MAXHISTORY 5000000
++static int           thread_history[MAXHISTORY];
++static unsigned char tick_history[MAXHISTORY];
++static int           tick_count_history[MAXHISTORY];
++static unsigned char tick_acquire[MAXHISTORY];
++static double        time_history[MAXHISTORY];
++static unsigned int  history_count = 0;
++
++#define EVENT_ENTRY   0
++#define EVENT_BUSY    1
++#define EVENT_RETRY   2
++#define EVENT_ACQUIRE 3
++#define EVENT_RELEASE 4
++
++static char *_codes[] = {"ENTRY", "BUSY", "RETRY", "ACQUIRE", "RELEASE"};
++
++extern volatile int _Py_Ticker;
++extern volatile int _Py_Ticker_Count;
++
+ #if defined(__APPLE__) || defined(HAVE_PTHREAD_DESTRUCTOR)
+ #define destructor xxdestructor
+ #endif
+@@ -407,21 +429,69 @@ PyThread_free_lock(PyThread_type_lock lock)
+     free((void *)thelock);
+ }
+ 
++static void
++print_history(void) {
++    int i;
++    FILE *f;
++
++    f = fopen("history.txt", "w");
++    for (i = 0; i < history_count; i++) {
++        fprintf(f,"%x %d %d %s %0.6f\n", thread_history[i], tick_history[i], tick_count_history[i], _codes[tick_acquire[i]], time_history[i]);
++    }
++    fclose(f);
++}
++
++static int
++log_history(int start_thread, int event, int get_tz) {
++    if (history_count < MAXHISTORY) {
++        thread_history[history_count] = start_thread;
++        tick_history[history_count] = _Py_Ticker;
++        tick_count_history[history_count] = _Py_Ticker_Count;
++        if(get_tz) {
++            {
++                struct timeval t;
++#ifdef GETTIMEOFDAY_NO_TZ
++            if (gettimeofday(&t) == 0)
++        time_history[history_count] = (double)t.tv_sec + t.tv_usec*0.000001;
++#else /* !GETTIMEOFDAY_NO_TZ */
++            if (gettimeofday(&t, (struct timezone *)NULL) == 0)
++        time_history[history_count] = (double)t.tv_sec + t.tv_usec*0.000001;
++#endif /* !GETTIMEOFDAY_NO_TZ */
++            }
++        } else {
++            time_history[history_count] = 0.0;
++        }
++        tick_acquire[history_count++] = event;
++        return 1;
++    }
++    return 0;
++}
++
+ int
+ PyThread_acquire_lock(PyThread_type_lock lock, int waitflag)
+ {
+     int success = 0;
+     pthread_lock *thelock = (pthread_lock *)lock;
+     int status, error = 0;
++    int start_thread = 0;
++    if (history_count == 0) {
++        atexit(print_history);
++    }
+ 
+     dprintf(("PyThread_acquire_lock(%p, %d) called\n", lock, waitflag));
+ 
+     if (waitflag) {
+         status = pthread_mutex_lock( &thelock->mut );
++        start_thread = (int) pthread_self();
++        log_history(start_thread, EVENT_ENTRY, 0);
++
+         CHECK_STATUS("pthread_mutex_lock[1]");
+     }
+     else {
+         status = pthread_mutex_trylock( &thelock->mut );
++        start_thread = (int) pthread_self();
++        log_history(start_thread, EVENT_ENTRY, 0);
++
+         if (status != EBUSY)
+             CHECK_STATUS("pthread_mutex_trylock[1]");
+     }
+@@ -433,12 +503,25 @@ PyThread_acquire_lock(PyThread_type_lock lock, int waitflag)
+ 
+             /* mut must be locked by me -- part of the condition
+              * protocol */
++            int ntries = 0;
+             while ( thelock->locked ) {
++                if (ntries == 0) {
++                    log_history(start_thread, EVENT_BUSY, 0);
++                }
+                 status = pthread_cond_wait(&thelock->lock_released,
+                                            &thelock->mut);
+                 CHECK_STATUS("pthread_cond_wait");
++                if (thelock->locked) {
++                    if(log_history(start_thread, EVENT_RETRY, 0)) {
++                        ntries += 1;
++                    }
++                } else {
++                    log_history(start_thread, EVENT_ACQUIRE, 1);
++                }
+             }
+             success = 1;
++        } else {
++            log_history(start_thread, EVENT_ACQUIRE, 0);
+         }
+ 
+         if (success) thelock->locked = 1;
+@@ -463,6 +546,8 @@ PyThread_release_lock(PyThread_type_lock lock)
+     status = pthread_mutex_lock( &thelock->mut );
+     CHECK_STATUS("pthread_mutex_lock[3]");
+ 
++    log_history((int) pthread_self(), EVENT_RELEASE, 0);
++
+     thelock->locked = 0;
+ 
+     status = pthread_mutex_unlock( &thelock->mut );
