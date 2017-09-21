@@ -1,9 +1,9 @@
 Hiruko
 ======
 
-Getting inside Python's GIL and Analyzing how it works with threads.
+Getting inside Python's GIL(Global Interpreter Lock) and Analyzing how it works with threads.
 
-*Note: Work in Progress*
+*Note: Work in Progress (It will take time; I am good in C :|)*
 
 The Code
 --------
