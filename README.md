@@ -3,7 +3,7 @@ Hiruko
 
 Getting inside Python's GIL(Global Interpreter Lock) and Analyzing how it works with threads.
 
-*Note: Work in Progress (It will take time; I am not good in C :|)*
+*Note: Work in [Progress](https://trello.com/b/oM4fkHZD/hiruko) (It will take time; I am not good in C :|)*
 
 The Code
 --------
@@ -16,7 +16,9 @@ The Code
 
 * How the number of cores affects thread execution and GIL?
 * How the number of threads affects their execution and GIL?
-* And more ... (feel free to create a new issue if you have any suggestions?)
+* And more ...
+
+(feel free to create a new issue if you have any suggestions)
 
 Credits
 -------
