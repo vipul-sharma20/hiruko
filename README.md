@@ -3,7 +3,7 @@ Hiruko
 
 Getting inside Python's GIL(Global Interpreter Lock) and Analyzing how it works with threads.
 
-*Note: Work in Progress (It will take time; I am good in C :|)*
+*Note: Work in Progress (It will take time; I am not good in C :|)*
 
 The Code
 --------
