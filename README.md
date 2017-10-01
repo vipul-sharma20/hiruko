@@ -7,10 +7,12 @@ Getting inside Python's GIL(Global Interpreter Lock) and Analyzing how it works 
 
 The Code
 --------
-***NOTE: Below is what I've done for Python 2.7.14. Will be checking out code for Python 3.6 soon***
 
 * I've included the patch file to log GIL ticks and threads executed
-* Or, you can check out my fork of CPython at [hiruko-2.7](https://github.com/vipul-sharma20/cpython/tree/hiruko-2.7) which includes the logging code.
+* Or, you can check out my fork of CPython at:
+    * [hiruko-2.7](https://github.com/vipul-sharma20/cpython/tree/hiruko-2.7) which includes the logging code.
+    * [hiruko-3.6](https://github.com/vipul-sharma20/cpython/tree/hiruko-3.6) which includes the logging code.
+
 
 ### Questions ###
 
